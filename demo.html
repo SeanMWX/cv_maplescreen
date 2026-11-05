@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>公屏消息 · MapleScreen</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      color: #282121;
+      background: #f6f3ee;
+      --accent: #7a2d3d;
+      --muted: #6e625e;
+      --line: #e8e1da;
+      --surface: #fffdfa;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .shell { width: min(1080px, calc(100% - 48px)); margin-inline: auto; }
+    .topbar { background: var(--surface); border-bottom: 1px solid var(--line); }
+    .topbar-inner { display: flex; align-items: center; justify-content: space-between; min-height: 68px; gap: 14px; }
+    .brand, .actions, .import, .source, .search { display: flex; align-items: center; }
+    .brand { gap: 11px; font-weight: 750; letter-spacing: -.025em; }
+    .mark {
+      display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+      color: #ffd29f; background: #512331; border-radius: 9px;
+    }
+    .actions { gap: 16px; min-width: 0; }
+    .source { gap: 7px; color: var(--muted); font-size: 12px; min-width: 0; }
+    .source::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%; background: #b46d40; }
+    .source span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .import {
+      gap: 7px; justify-content: center; flex: none; padding: 8px 12px; border: 1px solid #d9c4c8;
+      border-radius: 7px; background: #fffdfa; color: var(--accent); font-size: 13px; font-weight: 650;
+    }
+    .import:hover { background: #f9eef0; }
+    main { padding-block: 38px 56px; }
+    .intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+    .eyebrow { margin: 0 0 6px; color: var(--accent); font-size: 11px; letter-spacing: .16em; font-weight: 750; }
+    h1 { margin: 0; font-size: clamp(32px, 5vw, 43px); letter-spacing: -.065em; line-height: 1.2; }
+    .description { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .stats { display: flex; gap: clamp(14px, 3vw, 34px); margin: 0; flex: none; }
+    .stats div { display: flex; flex-direction: column-reverse; border-left: 1px solid #ded3ca; padding-left: 15px; }
+    .stats dt { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .stats dd { margin: 0 0 3px; font-size: 25px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; }
+    .board { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 16px #34241408; }
+    .preview { margin: 0 0 20px; overflow: hidden; }
+    .preview-header { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; padding: 12px 18px; }
+    .preview-header h2 { margin: 0; font-size: 15px; }
+    .preview-region { color: var(--muted); font: 12px ui-monospace, Consolas, monospace; }
+    .preview-stage { display: grid; place-items: center; min-height: 86px; padding: 8px; background: #292327; color: #e0d2ca; }
+    .preview-stage img { display: block; max-width: 100%; max-height: min(38vh, 360px); width: auto; height: auto; }
+    .preview-stage p { margin: 0; padding: 14px; text-align: center; font-size: 13px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 18px; }
+    .filters { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+    .filter { border: 1px solid transparent; background: transparent; color: #5e5450; padding: 6px 9px; border-radius: 6px; font-size: 13px; white-space: nowrap; }
+    .filter:hover { background: #f5f0eb; }
+    .filter[aria-pressed="true"] { color: var(--accent); background: #f7e9ec; border-color: #f1dce1; font-weight: 700; }
+    .filter-count { font-size: 11px; margin-left: 5px; font-variant-numeric: tabular-nums; }
+    .search { gap: 8px; padding: 7px 10px; border: 1px solid #ddd4cd; border-radius: 7px; color: var(--muted); min-width: 220px; }
+    .search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .search input { min-width: 0; width: 100%; padding: 0; background: transparent; border: 0; outline: none; color: #282121; font-size: 13px; }
+    .search input:focus-visible { outline: none; }
+    .search input::placeholder { color: #746861; }
+    .list-caption {
+      display: flex; justify-content: space-between; gap: 8px; padding: 9px 18px;
+      background: #faf6f0; color: #6c5d55; font-size: 12px; border-block: 1px solid var(--line);
+    }
+    #results { flex: none; }
+    #feed-status { text-align: end; overflow-wrap: anywhere; }
+    #feed-status[data-state="active"] { color: #285743; }
+    #feed-status[data-state="disconnected"] { color: var(--accent); }
+    .messages { list-style: none; padding: 0; margin: 0; }
+    .messages[data-live] { max-height: clamp(220px, 42vh, 480px); overflow-y: auto; scrollbar-gutter: stable; }
+    .messages:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .message { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 6px; padding: 12px 18px; }
+    .messages[data-live] .message { grid-template-columns: minmax(42px, 7ch) minmax(0, 1fr); }
+    .message + .message { border-top: 1px solid var(--line); }
+    .message[data-type="system"] { background: #fbfaf6; }
+    .message:last-child { border-radius: 0 0 11px 11px; }
+    .number, .channel { font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    .number { color: #7a6c63; font-size: 11px; padding-top: 4px; }
+    .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+    .player { font-weight: 750; font-size: 14px; overflow-wrap: anywhere; }
+    .channel, .type { padding: 2px 6px; font-size: 11px; line-height: 1.45; border-radius: 4px; white-space: nowrap; }
+    .channel { background: #f2ede8; color: #5b4b43; font-weight: 700; white-space: normal; overflow-wrap: anywhere; }
+    .type { background: #f0ece7; color: #665a54; }
+    .previous { color: var(--muted); font-size: 11px; }
+    .message[data-type="megaphone"] .type { color: #823447; background: #f9e9ed; }
+    .message[data-type="local"] .type { color: #285743; background: #e8f3ec; }
+    .message[data-type="system"] .type { color: #65501f; background: #f4eedc; }
+    .medal { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .body { margin: 5px 0 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .empty { margin: 0; padding: 48px 16px; text-align: center; color: var(--muted); font-size: 14px; }
+    .notice { margin: 0 0 16px; padding: 11px 14px; background: #f8e8e9; color: #7a2838; border-radius: 7px; font-size: 14px; }
+    @media (max-width: 630px) {
+      .shell { width: calc(100% - 28px); }
+      main { padding-top: 25px; }
+      .intro { align-items: flex-start; flex-direction: column; gap: 17px; }
+      .source span { max-width: 105px; }
+      .actions { gap: 8px; }
+      .preview-header { padding-inline: 12px; }
+      .toolbar { padding-inline: 12px; }
+      .search { flex: 1 1 100%; min-width: 0; }
+      .list-caption { padding-inline: 12px; }
+      .message { grid-template-columns: 30px minmax(0, 1fr); padding-inline: 12px; }
+    }
+    @media (max-width: 390px) {
+      .source { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">
+          <svg width="21" height="21" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M9 2h2v3h2v3h2V6h2v3h2v3h-3v2h-3v2h-2v3H9v-3H7v-2H4v-2H1V9h2V6h2v2h2V5h2z"/>
+          </svg>
+        </span>
+        MapleScreen
+      </div>
+      <div class="actions">
+        <div class="source"><span id="source" title="内置截图样本">内置截图样本</span></div>
+        <button id="import" class="import" type="button" title="支持 JSON 和 JSONL 文件">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M4 15v5h16v-5"/></svg>
+          导入记录
+        </button>
+        <input id="file" type="file" accept=".json,.jsonl,application/json,application/x-ndjson" hidden>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <div class="intro">
+      <div>
+        <p class="eyebrow">MAPLESTORY · CHAT LOG</p>
+        <h1>公屏消息</h1>
+        <p id="description" class="description">逐条查看截图识别出的玩家、频道、勋章和正文。</p>
+      </div>
+      <dl class="stats">
+        <div><dt id="total-label">全部记录</dt><dd id="total">0</dd></div>
+        <div><dt>喇叭</dt><dd id="megaphones">0</dd></div>
+        <div><dt>系统提示</dt><dd id="systems">0</dd></div>
+      </dl>
+    </div>
+
+    <p id="notice" class="notice" role="alert" hidden></p>
+    <section id="preview" class="board preview" aria-labelledby="preview-title" hidden>
+      <div class="preview-header">
+        <h2 id="preview-title">采集画面</h2>
+        <span id="preview-region" class="preview-region"></span>
+      </div>
+      <div class="preview-stage">
+        <p id="preview-empty">等待第一张截图</p>
+        <img id="preview-image" alt="当前框选的聊天区域" hidden>
+      </div>
+    </section>
+    <section class="board" aria-label="公屏记录">
+      <div class="toolbar">
+        <div id="filters" class="filters" role="group" aria-label="筛选消息类型"></div>
+        <label class="search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></svg>
+          <input id="query" type="search" aria-label="搜索消息" placeholder="搜索玩家、频道或正文">
+        </label>
+      </div>
+      <div class="list-caption">
+        <span id="results" aria-live="polite"></span>
+        <span id="feed-status" role="status">按原始顺序</span>
+      </div>
+      <ol id="messages" class="messages" role="list"></ol>
+      <p id="empty" class="empty" hidden></p>
+    </section>
+    <noscript><p>请启用 JavaScript 后查看聊天记录。</p></noscript>
+  </main>
+
+  <script id="sample-data" type="application/json">
+[
+  {
+    "medal": "\u003c枫叶三周年勋章>",
+    "player_name": "九菜盒子",
+    "channel": "CH10",
+    "text": "6人绯红速推目前龙拳标，来英雄弓奶！",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": null,
+    "player_name": "还可以尚一",
+    "channel": "CH14",
+    "text": "乌鲁2私教350W",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": "\u003c中级冒际勋章>",
+    "player_name": "占戈",
+    "channel": "CH08",
+    "text": "鳄鱼私教120有经验·效率7000-1E5等级越高经验越多。可托管",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": null,
+    "player_name": null,
+    "channel": null,
+    "text": "贞英俊玩家带领远征队成功击败扎昆（下层），共耗时：15分51秒！",
+    "message_type": "system"
+  },
+  {
+    "medal": "\u003c大师级冒险家勋章>",
+    "player_name": "蓝警魔鬼红天",
+    "channel": "CH29",
+    "text": "收村内村外妖怪禅师卡5连，带价MMMM，随时可到",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": "\u003c大师级冒险家勋章>",
+    "player_name": "念慈悲渡众生",
+    "channel": "CH09",
+    "text": "大树来经验卡戒老板，300w，30分钟内，有退组花",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": "\u003c冒险岛商店购物勋章>",
+    "player_name": "一毛",
+    "channel": "CH13",
+    "text": "来个170+的大树搭子~~~",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": "\u003c任务狂人勋章>",
+    "player_name": "Stephen.Chow",
+    "channel": "CH09",
+    "text": "继续60W/张收小金人大铜人胖银人MMMMMMMMMM\nMMMMMMM",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": null,
+    "player_name": null,
+    "channel": null,
+    "text": "VingsMS]严禁私下买卖、转让NX0048-NX1998系列卡密，包括代充值，代购买卡密。举报查实奖\n励点券，并严肃处理违规账号！",
+    "message_type": "system"
+  },
+  {
+    "medal": "\u003c高级冒险家勋章>",
+    "player_name": "爱吃酸辣粉",
+    "channel": "CH04",
+    "text": "骨1私教，3组超级就行，不扫地，需要的滴滴",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": "\u003c大师级冒险家勋章>",
+    "player_name": "蓝警魔鬼红天",
+    "channel": "CH29",
+    "text": "收村内村外妖怪禅师卡5连，带价MMMM，随时可到",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": null,
+    "player_name": null,
+    "channel": null,
+    "text": "越走越远获得道具【单手斧攻击诅咒卷轴]通过射手村快乐百宝箱随机抽出！大家恭喜他（她）\n吧！",
+    "message_type": "system"
+  },
+  {
+    "medal": "\u003c日世界征战者勋章>",
+    "player_name": "花人局",
+    "channel": "CH18",
+    "text": "王亚洲牛逼！！！",
+    "message_type": "megaphone"
+  },
+  {
+    "medal": "\u003c任务狂人勋章>",
+    "player_name": "毒奶粉",
+    "channel": "CH17",
+    "text": "村外三排妖憎来近战，洗澡奶==222222222",
+    "message_type": "megaphone"
+  }
+]
+  </script>
+  <script>
+    const labels = {
+      megaphone: '喇叭',
+      local: '当前频道',
+      system: '系统提示',
+      unknown: '待确认',
+    };
+    const filters = document.getElementById('filters');
+    const query = document.getElementById('query');
+    const messages = document.getElementById('messages');
+    const empty = document.getElementById('empty');
+    const fileInput = document.getElementById('file');
+    const notice = document.getElementById('notice');
+    const feedStatus = document.getElementById('feed-status');
+    const importButton = document.getElementById('import');
+    const previewImage = document.getElementById('preview-image');
+    const previewEmpty = document.getElementById('preview-empty');
+    const previewRegion = document.getElementById('preview-region');
+    const liveMode = location.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)
+      && new URLSearchParams(location.search).get('live') === '1';
+    let records = [];
+    let activeType = 'all';
+    let previousMessages = null;
+    let sessionId = null;
+    let monitorActive = null;
+    let previewRevision = null;
+
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = text;
+      return node;
+    }
+
+    function render() {
+      const keyword = query.value.trim().toLowerCase();
+      const rows = document.createDocumentFragment();
+      let shown = 0;
+      for (const [index, record] of records.entries()) {
+        if (activeType !== 'all' && activeType !== record.message_type) continue;
+        const fields = [record.player_name, record.channel, record.medal, record.text];
+        if (keyword && !fields.some(value => value?.toLowerCase().includes(keyword))) continue;
+
+        const row = element('li', 'message', '');
+        row.dataset.type = record.message_type;
+        const number = liveMode && record.id !== null ? record.id : index + 1;
+        row.append(element('span', 'number', `#${String(number).padStart(2, '0')}`));
+        const content = document.createElement('div');
+        const meta = element('div', 'meta', '');
+        if (record.player_name) {
+          meta.append(element('span', 'player', record.player_name));
+        }
+        if (record.channel) meta.append(element('span', 'channel', record.channel));
+        meta.append(element('span', 'type', labels[record.message_type]));
+        if (record.medal) meta.append(element('span', 'medal', record.medal));
+        if (liveMode && sessionId !== null && record.sessionId !== null && record.sessionId !== sessionId) {
+          meta.append(element('span', 'previous', '历史'));
+        }
+        content.append(meta, element('p', 'body', record.text));
+        row.append(content);
+        rows.append(row);
+        shown += 1;
+      }
+      messages.replaceChildren(rows);
+      document.getElementById('results').textContent = `显示 ${shown} / ${records.length} 条`;
+      empty.hidden = shown > 0;
+      empty.textContent = records.length ? '没有符合条件的消息'
+        : liveMode ? '还没有收到新消息' : '这份文件没有聊天记录';
+    }
+
+    function setRecords(data, sourceName, { reset = true, lineNumbers } = {}) {
+      if (!Array.isArray(data)) throw new Error('请选择 OCR 导出的 JSON 数组。');
+      records = data.map((item, index) => {
+        const row = lineNumbers ? `JSONL 第 ${lineNumbers[index]} 行` : `第 ${index + 1} 条记录`;
+        if (!item || typeof item.text !== 'string') {
+          throw new Error(`${row}缺少正文。`);
+        }
+        const { medal, player_name, channel, text, message_type, id, session_id } = item;
+        if ([medal, player_name, channel].some(value => value != null && typeof value !== 'string')) {
+          throw new Error(`${row}的勋章、玩家或频道格式不正确。`);
+        }
+        const knownType = typeof message_type === 'string' && Object.hasOwn(labels, message_type);
+        return {
+          medal, player_name, channel, text,
+          message_type: knownType ? message_type : 'unknown',
+          id: Number.isSafeInteger(id) ? id : null,
+          sessionId: Number.isSafeInteger(session_id) ? session_id : null,
+        };
+      });
+      if (reset) {
+        activeType = 'all';
+        query.value = '';
+      }
+      const source = document.getElementById('source');
+      source.textContent = sourceName;
+      source.title = sourceName;
+      const counts = { all: records.length, megaphone: 0, local: 0, system: 0, unknown: 0 };
+      for (const record of records) counts[record.message_type] += 1;
+      document.getElementById('total').textContent = counts.all;
+      document.getElementById('megaphones').textContent = counts.megaphone;
+      document.getElementById('systems').textContent = counts.system;
+      for (const button of filters.children) {
+        const type = button.dataset.type;
+        button.hidden = type === 'unknown' && !counts.unknown && activeType !== type;
+        button.setAttribute('aria-pressed', String(type === activeType));
+        button.lastElementChild.textContent = counts[type];
+      }
+      render();
+    }
+
+    function readImportedRecords(contents, fileName) {
+      const text = contents.replace(/^\uFEFF/, '');
+      if (!fileName.toLowerCase().endsWith('.jsonl')) return { data: JSON.parse(text) };
+      const data = [];
+      const lineNumbers = [];
+      for (const [index, line] of text.split(/\r?\n/).entries()) {
+        if (!line.trim()) continue;
+        try {
+          data.push(JSON.parse(line));
+        } catch {
+          throw new Error(`JSONL 第 ${index + 1} 行格式不正确。`);
+        }
+        lineNumbers.push(index + 1);
+      }
+      return { data, lineNumbers };
+    }
+
+    function setNotice(message) {
+      if (notice.textContent !== message) notice.textContent = message;
+      notice.hidden = !message;
+    }
+
+    function setFeedStatus(message, state) {
+      if (feedStatus.textContent !== message) feedStatus.textContent = message;
+      feedStatus.dataset.state = state;
+    }
+
+    function applyLiveState(snapshot) {
+      if (!snapshot || typeof snapshot.active !== 'boolean' || !Array.isArray(snapshot.messages)) {
+        throw new Error('监控数据格式不正确');
+      }
+      const nextSession = Number.isSafeInteger(snapshot.session_id) ? snapshot.session_id : null;
+      const serialized = JSON.stringify(snapshot.messages);
+      if (serialized !== previousMessages || nextSession !== sessionId) {
+        const followLatest = activeType === 'all' && !query.value.trim()
+          && messages.scrollHeight - messages.scrollTop - messages.clientHeight <= 48;
+        sessionId = nextSession;
+        setRecords(snapshot.messages, '屏幕实时监控', { reset: false });
+        if (followLatest) messages.scrollTop = messages.scrollHeight;
+        previousMessages = serialized;
+      }
+      monitorActive = snapshot.active;
+      const hasCurrent = records.some(record => record.sessionId === sessionId);
+      const status = [monitorActive ? (hasCurrent ? '监控中' : '监控中 · 等待新消息') : '监控已停止'];
+      if (snapshot.queue_depth > 0) status.push(`待识别 ${snapshot.queue_depth}`);
+      if (snapshot.gaps > 0) status.push(`采集缺口 ${snapshot.gaps} 次`);
+      setFeedStatus(status.join(' · '), monitorActive ? 'active' : 'stopped');
+      setNotice(typeof snapshot.last_error === 'string' ? snapshot.last_error : '');
+    }
+
+    function applyPreview(snapshot) {
+      const { revision, region } = snapshot;
+      if (region) {
+        const { x, y, width, height } = region;
+        if ([x, y, width, height].every(Number.isSafeInteger)) {
+          previewRegion.textContent = `X ${x} · Y ${y} · ${width} × ${height} px`;
+        }
+      }
+      if (revision === null) {
+        previewImage.hidden = true;
+        previewImage.removeAttribute('src');
+        previewEmpty.textContent = '等待第一张截图';
+        previewEmpty.hidden = false;
+        previewRevision = null;
+      } else if (Number.isSafeInteger(revision) && revision !== previewRevision) {
+        previewRevision = revision;
+        previewImage.src = `/api/preview.png?v=${revision}`;
+      }
+    }
+
+    function connectLive() {
+      const stream = new EventSource('/api/events');
+      stream.addEventListener('open', () => { previewRevision = null; });
+      stream.addEventListener('state', event => {
+        try {
+          applyLiveState(JSON.parse(event.data));
+        } catch {
+          setFeedStatus('监控数据无法读取，等待下一次更新', 'disconnected');
+        }
+      });
+      stream.addEventListener('preview', event => {
+        try {
+          applyPreview(JSON.parse(event.data));
+        } catch {
+          previewImage.hidden = true;
+          previewEmpty.textContent = '等待下一张截图';
+          previewEmpty.hidden = false;
+        }
+      });
+      stream.addEventListener('error', () => {
+        if (monitorActive !== false) setFeedStatus('监控连接已断开，正在重试', 'disconnected');
+      });
+    }
+
+    for (const [type, label] of Object.entries({ all: '全部', ...labels })) {
+      const button = element('button', 'filter', label);
+      button.type = 'button';
+      button.dataset.type = type;
+      button.append(element('span', 'filter-count', '0'));
+      filters.append(button);
+    }
+    filters.addEventListener('click', event => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      activeType = button.dataset.type;
+      for (const filter of filters.children) {
+        filter.setAttribute('aria-pressed', String(filter === button));
+      }
+      render();
+    });
+    query.addEventListener('input', render);
+    importButton.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      fileInput.value = '';
+      try {
+        const { data, lineNumbers } = readImportedRecords(await file.text(), file.name);
+        setRecords(data, file.name, { lineNumbers });
+        setNotice('');
+      } catch (error) {
+        setNotice(error instanceof SyntaxError ? '无法读取这份 JSON，请检查文件格式。' : error.message);
+      }
+    });
+
+    if (liveMode) {
+      importButton.hidden = true;
+      document.getElementById('description').textContent = '上方显示框选画面，下方同步更新公屏记录。';
+      document.getElementById('total-label').textContent = '最近记录';
+      document.getElementById('preview').hidden = false;
+      messages.dataset.live = '';
+      messages.tabIndex = 0;
+      previewImage.addEventListener('load', () => {
+        previewImage.hidden = false;
+        previewEmpty.hidden = true;
+      });
+      previewImage.addEventListener('error', () => {
+        previewImage.hidden = true;
+        previewEmpty.textContent = '等待下一张截图';
+        previewEmpty.hidden = false;
+      });
+      setRecords([], '屏幕实时监控');
+      setFeedStatus('正在连接监控', 'connecting');
+      connectLive();
+    } else {
+      setRecords(JSON.parse(document.getElementById('sample-data').textContent), '内置截图样本');
+    }
+  </script>
+</body>
+</html>
