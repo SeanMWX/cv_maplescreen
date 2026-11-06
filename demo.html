@@ -56,6 +56,44 @@
     .preview-stage { display: grid; place-items: center; min-height: 86px; padding: 8px; background: #292327; color: #e0d2ca; }
     .preview-stage img { display: block; max-width: 100%; max-height: min(38vh, 360px); width: auto; height: auto; }
     .preview-stage p { margin: 0; padding: 14px; text-align: center; font-size: 13px; }
+    .alert-settings { margin: 0 0 16px; }
+    .alert-settings summary {
+      display: flex; align-items: center; gap: 9px; padding: 12px 18px;
+      color: #282121; font-size: 14px; font-weight: 700; cursor: pointer; list-style: none;
+    }
+    .alert-settings summary::-webkit-details-marker { display: none; }
+    .alert-settings summary::after {
+      content: ""; width: 7px; height: 7px; margin: -3px 2px 0 auto; flex: none;
+      border: solid var(--accent); border-width: 0 2px 2px 0; transform: rotate(45deg);
+    }
+    .alert-settings[open] summary::after { margin-top: 3px; transform: rotate(225deg); }
+    .alert-settings summary:focus-visible, .alert-form textarea:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+    .alert-form {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 22px;
+      padding: 13px 18px; border-top: 1px solid var(--line); font-size: 13px;
+    }
+    .alert-label { display: block; margin-bottom: 5px; font-weight: 700; }
+    .alert-form textarea {
+      display: block; width: 100%; min-height: 62px; padding: 8px 10px;
+      border: 1px solid #ddd4cd; border-radius: 7px; resize: vertical; font: inherit; color: #282121;
+    }
+    .alert-form input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+    .alert-options, .alert-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+    .alert-options label { display: inline-flex; align-items: center; gap: 6px; }
+    .alert-form .hint { margin: 5px 0 0; color: var(--muted); line-height: 1.55; }
+    .alert-actions { grid-column: 1 / -1; }
+    .alert-actions button[type="submit"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .alert-actions button[type="submit"]:hover { background: #642533; }
+    .alert-status { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+    .alert-toast {
+      position: fixed; right: 16px; bottom: 16px; z-index: 10; width: min(370px, calc(100% - 32px));
+      padding: 13px 14px; border: 1px solid #d9c4c8; border-left: 4px solid var(--accent);
+      border-radius: 9px; background: var(--surface); color: #282121; box-shadow: 0 6px 24px #34241426;
+    }
+    .alert-toast-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+    .alert-toast p { margin: 7px 0 0; max-height: 30vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.55; }
     .toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 18px; }
     .filters { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
     .filter { border: 1px solid transparent; background: transparent; color: #5e5450; padding: 6px 9px; border-radius: 6px; font-size: 13px; white-space: nowrap; }
@@ -105,6 +143,8 @@
       .source span { max-width: 105px; }
       .actions { gap: 8px; }
       .preview-header { padding-inline: 12px; }
+      .alert-settings summary, .alert-form { padding-inline: 12px; }
+      .alert-form { grid-template-columns: minmax(0, 1fr); }
       .toolbar { padding-inline: 12px; }
       .search { flex: 1 1 100%; min-width: 0; }
       .list-caption { padding-inline: 12px; }
@@ -162,6 +202,32 @@
         <img id="preview-image" alt="当前框选的聊天区域" hidden>
       </div>
     </section>
+    <details id="keyword-alerts" class="board alert-settings" hidden>
+      <summary>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/></svg>
+        关键词提醒
+      </summary>
+      <form id="alert-form" class="alert-form">
+        <div>
+          <label class="alert-label" for="alert-keywords">关键词</label>
+          <textarea id="alert-keywords" rows="2" aria-describedby="alert-keywords-hint" placeholder="例如 火花，拍卖，BOSS"></textarea>
+          <p id="alert-keywords-hint" class="hint">用逗号、中文逗号或换行分隔。新识别的公屏消息命中时触发提醒。</p>
+        </div>
+        <div>
+          <div class="alert-label" id="alert-options-label">提醒方式</div>
+          <div class="alert-options" role="group" aria-labelledby="alert-options-label">
+            <label><input id="alert-sound" type="checkbox"> 声音提示</label>
+            <label><input id="alert-popup" type="checkbox" aria-describedby="alert-popup-hint"> 弹窗提醒</label>
+          </div>
+          <p id="alert-popup-hint" class="hint">浏览器可能询问是否允许系统通知。未授权时，提醒会显示在本页。</p>
+        </div>
+        <div class="alert-actions">
+          <button class="import" type="submit">保存</button>
+          <button id="alert-test" class="import" type="button">测试提醒</button>
+          <p id="alert-status" class="alert-status" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+    </details>
     <section class="board" aria-label="公屏记录">
       <div class="toolbar">
         <div id="filters" class="filters" role="group" aria-label="筛选消息类型"></div>
@@ -179,6 +245,13 @@
     </section>
     <noscript><p>请启用 JavaScript 后查看聊天记录。</p></noscript>
   </main>
+  <aside id="alert-toast" class="alert-toast" aria-label="关键词提醒" hidden>
+    <div class="alert-toast-header">
+      <strong>关键词提醒</strong>
+      <button id="alert-toast-close" class="import" type="button" aria-label="关闭关键词提醒">关闭</button>
+    </div>
+    <p id="alert-toast-text" role="status"></p>
+  </aside>
 
   <script id="sample-data" type="application/json">
 [
@@ -308,6 +381,7 @@
     let sessionId = null;
     let monitorActive = null;
     let previewRevision = null;
+    let keywordAlerts = null;
 
     function element(tag, className, text) {
       const node = document.createElement(tag);
@@ -466,11 +540,15 @@
       const stream = new EventSource('/api/events');
       stream.addEventListener('open', () => { previewRevision = null; });
       stream.addEventListener('state', event => {
+        let snapshot;
         try {
-          applyLiveState(JSON.parse(event.data));
+          snapshot = JSON.parse(event.data);
+          applyLiveState(snapshot);
         } catch {
           setFeedStatus('监控数据无法读取，等待下一次更新', 'disconnected');
+          return;
         }
+        keywordAlerts?.observe(snapshot);
       });
       stream.addEventListener('preview', event => {
         try {
@@ -484,6 +562,20 @@
       stream.addEventListener('error', () => {
         if (monitorActive !== false) setFeedStatus('监控连接已断开，正在重试', 'disconnected');
       });
+    }
+
+    async function startLive() {
+      try {
+        const { createKeywordAlerts } = await import('/assets/maplescreen_alerts.js');
+        keywordAlerts = createKeywordAlerts();
+      } catch {
+        document.getElementById('keyword-alerts').hidden = false;
+        for (const control of document.querySelectorAll('#alert-form input, #alert-form textarea, #alert-form button')) {
+          control.disabled = true;
+        }
+        document.getElementById('alert-status').textContent = '关键词提醒无法加载，请重启监控后刷新页面。';
+      }
+      connectLive();
     }
 
     for (const [type, label] of Object.entries({ all: '全部', ...labels })) {
@@ -535,7 +627,7 @@
       });
       setRecords([], '屏幕实时监控');
       setFeedStatus('正在连接监控', 'connecting');
-      connectLive();
+      startLive();
     } else {
       setRecords(JSON.parse(document.getElementById('sample-data').textContent), '内置截图样本');
     }

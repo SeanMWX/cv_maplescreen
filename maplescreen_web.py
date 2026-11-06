@@ -13,7 +13,7 @@ def _event(name: str, value: dict) -> bytes:
     return f"event: {name}\ndata: ".encode("ascii") + _encode_json(value) + b"\n\n"
 
 
-def make_handler(state, html: bytes) -> type[BaseHTTPRequestHandler]:
+def make_handler(state, html: bytes, keyword_script: bytes | None = None) -> type[BaseHTTPRequestHandler]:
     """Bind a monitor state to a handler for a loopback ThreadingHTTPServer.
 
     State exposes snapshots, the latest preview bytes and a revision-based
@@ -75,6 +75,8 @@ def make_handler(state, html: bytes) -> type[BaseHTTPRequestHandler]:
                 self._reply(302, "text/plain; charset=utf-8", b"", location="/?live=1")
             elif path in ("/", "/demo.html"):
                 self._reply(200, "text/html; charset=utf-8", html)
+            elif path == "/assets/maplescreen_alerts.js" and keyword_script is not None:
+                self._reply(200, "text/javascript; charset=utf-8", keyword_script)
             elif path == "/api/messages":
                 self._reply(200, "application/json; charset=utf-8", _encode_json(state.snapshot()))
             elif path == "/api/preview.png":

@@ -177,7 +177,11 @@ def run_monitor(capture, region, output: Path, database: Path, *, fps: int, port
     session = store.start_session((region.x, region.y, region.width, region.height))
     try:
         state = MonitorState(region, session, store.recent())
-        handler = make_handler(state, (_ROOT / "demo.html").read_bytes())
+        handler = make_handler(
+            state,
+            (_ROOT / "demo.html").read_bytes(),
+            (_ROOT / "maplescreen_alerts.js").read_bytes(),
+        )
         with ThreadingHTTPServer(("127.0.0.1", port), handler) as server:
             with output.open("a", encoding="utf-8", newline="\n", buffering=1) as sink:
                 web = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
