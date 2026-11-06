@@ -2,6 +2,12 @@
 
 从冒险岛公屏截图提取聊天记录。每条发言对应一个 JSON 对象，续行合并到同一条正文。
 
+## Windows 便携版
+
+把 `MapleScreen.exe` 复制到 Windows x64 电脑的可写文件夹，双击启动。框选聊天区并按 Enter，然后打开终端显示的本机网址。SQLite 和聊天日志会保存在 EXE 旁边的 `outputs` 文件夹。EXE 已包含 Python、OCR 模型和网页。
+
+在 PowerShell 运行 `./MapleScreen.exe --check` 可以检查便携包。使用 `--check-image 截图路径` 可以在不打开选区窗口的情况下验证截图 OCR。
+
 ## 安装
 
 在项目目录打开 PowerShell。以下命令使用 `cv_maplescreen` Conda 环境的 Python，依赖安装在项目内的 `.deps`。
@@ -9,6 +15,15 @@
 ```powershell
 $cvPython = 'D:\conda\envs\cv_maplescreen\python.exe'
 & $cvPython -m pip install --target .deps -r requirements.txt
+```
+
+要重新构建便携 EXE，在安装项目依赖后，从项目目录运行以下命令。
+
+```powershell
+& $cvPython -m pip install --target outputs/pyinstaller_deps pyinstaller==6.22.3
+$env:PYTHONPATH = "$PWD\outputs\pyinstaller_deps;$PWD\.deps"
+$env:PATH = "$(Split-Path $cvPython)\Library\bin;$env:PATH"
+& $cvPython -m PyInstaller --distpath outputs/release --workpath outputs/build MapleScreen.spec
 ```
 
 ## 识别截图

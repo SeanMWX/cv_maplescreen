@@ -17,6 +17,15 @@ from maplescreen_web import make_handler
 
 
 _ROOT = Path(__file__).resolve().parent
+_DATA_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else _ROOT
+
+
+def _load_web_assets() -> tuple[bytes, bytes]:
+    html = (_ROOT / "demo.html").read_bytes()
+    alerts = (_ROOT / "maplescreen_alerts.js").read_bytes()
+    if not html or not alerts:
+        raise ValueError("Viewer files are empty.")
+    return html, alerts
 
 
 class MonitorState:
@@ -177,11 +186,7 @@ def run_monitor(capture, region, output: Path, database: Path, *, fps: int, port
     session = store.start_session((region.x, region.y, region.width, region.height))
     try:
         state = MonitorState(region, session, store.recent())
-        handler = make_handler(
-            state,
-            (_ROOT / "demo.html").read_bytes(),
-            (_ROOT / "maplescreen_alerts.js").read_bytes(),
-        )
+        handler = make_handler(state, *_load_web_assets())
         with ThreadingHTTPServer(("127.0.0.1", port), handler) as server:
             with output.open("a", encoding="utf-8", newline="\n", buffering=1) as sink:
                 web = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True)
@@ -219,10 +224,13 @@ def main() -> None:
     parser.add_argument("--fps", type=int, default=30, help="Target screen capture rate (1–60, default 30)")
     parser.add_argument("--port", type=int, default=8765, help="Local viewer port (default 8765)")
     parser.add_argument("--include-existing", action="store_true", help="Read already visible lines on startup")
-    parser.add_argument("--database", type=Path, default=_ROOT / "outputs" / "maplescreen.sqlite3",
+    parser.add_argument("--database", type=Path, default=_DATA_ROOT / "outputs" / "maplescreen.sqlite3",
                         help="SQLite database for chat messages and capture sessions")
-    parser.add_argument("-o", "--output", type=Path, default=_ROOT / "outputs" / "live_messages.jsonl",
+    parser.add_argument("-o", "--output", type=Path, default=_DATA_ROOT / "outputs" / "live_messages.jsonl",
                         help="Append recognized messages to this UTF-8 JSON Lines file")
+    parser.add_argument("--check", action="store_true", help="Check the viewer and OCR runtime without screen capture")
+    parser.add_argument("--check-image", type=Path, metavar="PATH",
+                        help="Check the runtime and print OCR records for an image as UTF-8 JSON")
     args = parser.parse_args()
     if not 1 <= args.fps <= 60 or not 1 <= args.port <= 65535:
         parser.error("--fps must be 1–60 and --port must be 1–65535")
@@ -233,6 +241,20 @@ def main() -> None:
     try:
         from maplescreen_capture import ScreenCapture, ScreenRegion
         from maplescreen_ocr import warm_up
+
+        if args.check or args.check_image is not None:
+            _load_web_assets()
+            warm_up()
+            if args.check_image is not None:
+                from extract_chat import read_image
+                from maplescreen_ocr import extract_messages
+
+                records = extract_messages(read_image(args.check_image))
+                sys.stdout.reconfigure(encoding="utf-8")
+                print(json.dumps(records, ensure_ascii=False, indent=2))
+            else:
+                print("MapleScreen runtime check passed.")
+            return
 
         if len({args.output.resolve(), args.database.resolve(), (_ROOT / "demo.html").resolve()}) != 3:
             raise ValueError("SQLite、JSONL 和 demo.html 必须使用不同的文件。")
