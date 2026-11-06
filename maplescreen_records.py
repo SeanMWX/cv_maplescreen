@@ -58,7 +58,7 @@ def _parse_line(line: ChatLine) -> ChatMessage:
         if match := _MEDAL.match(header):
             medal = f"<{match[1]}>"
             header = header[match.end():].strip()
-        if match := _CHANNEL.search(header):
+        if line.layout != "player" and (match := _CHANNEL.search(header)):
             prefix = header[:match.start()]
             if (
                 medal or line.channel or not prefix or prefix[-1].isspace()

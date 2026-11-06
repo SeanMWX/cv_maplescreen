@@ -29,6 +29,11 @@ def _ink_runs(mask: np.ndarray) -> list[tuple[int, int]]:
             if 3 <= bottom - top <= 34]
 
 
+def local_text_mask(frame: np.ndarray) -> np.ndarray:
+    """Extract the white foreground pixels used by local chat."""
+    return cv2.inRange(frame, (255, 255, 255), (255, 255, 255))
+
+
 def text_mask(frame: np.ndarray) -> np.ndarray:
     """Isolate likely chat ink for line tracking and bounds within a BGR crop."""
     # MapleWings' plum chat text and cyan, yellow and lime system styles.
@@ -43,6 +48,15 @@ def text_mask(frame: np.ndarray) -> np.ndarray:
     badge = cv2.inRange(frame, (235, 217, 251), (242, 227, 255))
     near_badge = cv2.dilate(badge, np.ones((3, 3), dtype=np.uint8))
     ink |= near_badge & cv2.inRange(frame, (0, 0, 160), (75, 75, 255))
+
+    # White local text is an explicit style. Exclude the white edges of the
+    # colored badges before adding it, and protect the gaps between local
+    # lines from unrelated high-contrast details in the game background.
+    white = local_text_mask(frame)
+    for top, bottom in _ink_runs(ink):
+        white[max(0, top - 1):bottom + 1] = 0
+    for top, bottom in _ink_runs(white):
+        ink[top:bottom] |= white[top:bottom]
 
     # Contrast fallback for text outside the known chat colors. The short
     # horizontal bands reject large continuous regions of game artwork.

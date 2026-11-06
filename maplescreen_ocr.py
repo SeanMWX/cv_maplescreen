@@ -155,6 +155,23 @@ def _system_color(image: np.ndarray, row: list[Fragment]) -> tuple[int, int, int
     return None
 
 
+def _local_chat_crop(image: np.ndarray) -> tuple[int, int, np.ndarray] | None:
+    from maplescreen_tracking import local_text_mask
+
+    white = local_text_mask(image)
+    left, top, width, height = cv2.boundingRect(white)
+    if height < 4 or cv2.countNonZero(white) < 8:
+        return None
+    right = left + width
+    gray = cv2.cvtColor(image[top:top + height, max(0, left - 2):right + 2], cv2.COLOR_BGR2GRAY)
+    if np.median(gray) >= 160:
+        return None
+    # Use white pixels for bounds, then keep dimmer glyph strokes and colons.
+    ink = cv2.subtract(gray, 120)
+    black_on_white = cv2.bitwise_not(cv2.add(ink, ink))
+    return left, right, _enlarge(cv2.cvtColor(black_on_white, cv2.COLOR_GRAY2BGR))
+
+
 def warm_up() -> None:
     """Load the local models before the first live message reaches the worker."""
     _engine()
@@ -168,21 +185,27 @@ def recognize_new_rows(strips: list[np.ndarray]) -> list[ChatMessage]:
     text_crops = []
     digit_crops = []
     for strip in strips:
+        height, width = strip.shape[:2]
+        if height < 6:
+            continue  # A sliver at the edge of the capture cannot contain a readable line.
         columns = np.flatnonzero(np.any(text_mask(strip), axis=0))
         badges = _channel_badges(strip)
         if not len(columns) and not badges:
             continue
-        height, width = strip.shape[:2]
         left, right = (int(columns[0]), int(columns[-1]) + 1) if len(columns) else (0, width)
         crop = strip[:, max(0, left - 3):min(width, right + 3)]
         color = _system_color(strip, [Fragment(Box(left, 0, right - left, height), "")])
+        local = _local_chat_crop(strip) if not badges and color is None else None
         if badges:
             header, digits, body = _badge_crops(strip, badges[0], right + 3)
             text_crops.extend((header, body))
             digit_crops.append(digits)
+        elif local is not None:
+            left, right, enhanced = local
+            text_crops.append(enhanced)
         else:
             text_crops.append(_enlarge(crop))
-        rows.append((left, right, height, width, color, bool(badges)))
+        rows.append((left, right, height, width, color, bool(badges), local is not None))
 
     if not text_crops:
         return []
@@ -193,17 +216,18 @@ def recognize_new_rows(strips: list[np.ndarray]) -> list[ChatMessage]:
     digit_iter = iter(digits)
     lines = []
     left_edge = min(row[0] for row in rows)
-    previous_color = None
+    previous_style = None
     previous_right = None
-    for left, right, height, width, color, has_badge in rows:
+    for left, right, height, width, color, has_badge, is_local in rows:
         text, _ = next(text_iter)
         if has_badge:
             body, _ = next(text_iter)
             channel, _ = next(digit_iter)
             line = _badge_line(text, channel, body)
-            color = None
+            style = None
         else:
-            same_style = bool(lines) and color == previous_color
+            style = "local" if is_local else color
+            same_style = bool(lines) and style == previous_style
             indented = left - left_edge > height * 0.6 and not re.search(r"[:：]", text)
             wraps_system = color is not None and previous_right is not None and (
                 width - previous_right <= 3 * height and not text.startswith(("[", "【"))
@@ -211,9 +235,9 @@ def recognize_new_rows(strips: list[np.ndarray]) -> list[ChatMessage]:
             if same_style and (indented or wraps_system):
                 line = ChatLine(text, layout="continuation")
             else:
-                line = ChatLine(text, layout="system" if color else "unknown")
+                line = ChatLine(text, layout="player" if is_local else "system" if color else "unknown")
         lines.append(line)
-        previous_color, previous_right = color, right
+        previous_style, previous_right = style, right
     return parse_messages(lines)
 
 
@@ -235,33 +259,51 @@ def extract_messages(image: np.ndarray) -> list[ChatMessage]:
 
     items = [(badge.center_y, line, None) for badge, line in
              zip(badges, _badge_lines(engine, image, badges, badge_rows))]
-    for center_y, row in other_rows:
+    local_rows = []
+    for index, (center_y, row) in enumerate(other_rows):
         text = "".join(part.text for part in row)
         color = _system_color(image, row)
+        top = min(part.box.y for part in row)
+        bottom = max(part.box.y + part.box.height for part in row)
+        if index + 1 < len(other_rows):
+            next_top = min(part.box.y for part in other_rows[index + 1][1])
+            if center_y < next_top < bottom:
+                bottom = next_top  # Detector rectangles can overlap the next text row.
+        local = _local_chat_crop(image[top:bottom]) if color is None else None
+        if local is not None:
+            local_rows.append((center_y, row, text, local[2]))
+            continue
         items.append((center_y, ChatLine(text, layout="system" if color else "unknown"), (row, color)))
+    if local_rows:
+        recognized, _ = engine.text_rec([crop for _, _, _, crop in local_rows])
+        for (center_y, row, raw, _), (text, _) in zip(local_rows, recognized):
+            if not text.strip() or (re.search(r"[:：]", raw) and not re.search(r"[:：]", text)):
+                text = raw
+            items.append((center_y, ChatLine(text, layout="player"), (row, None)))
 
     lines = []
-    previous_color = None
+    previous_style = None
     previous_right = None
     previous_y = None
     left_edge = min((part.box.x for row in rows for part in row), default=0)
     right_edge = max((part.box.right for row in rows for part in row), default=0)
     for center_y, line, detected in sorted(items, key=lambda item: item[0]):
-        color = None
+        style = None
         right = None
         if detected:
             row, color = detected
+            style = "local" if line.layout == "player" else color
             right = max(part.box.right for part in row)
             height = row[0].box.height
             near_previous = previous_y is not None and center_y - previous_y < height * 1.6
             indented = row[0].box.x - left_edge > height * 0.6
             same_system_style = (
-                color is not None and color == previous_color and previous_right is not None
+                color is not None and style == previous_style and previous_right is not None
                 and right_edge - previous_right <= 3 * height and not line.text.startswith(("[", "【"))
             )
-            plain_continuation = indented and color == previous_color and not re.search(r"[:：]", line.text)
+            plain_continuation = indented and style == previous_style and not re.search(r"[:：]", line.text)
             if near_previous and (same_system_style or plain_continuation):
                 line = ChatLine(line.text, layout="continuation")
         lines.append(line)
-        previous_color, previous_right, previous_y = color, right, center_y
+        previous_style, previous_right, previous_y = style, right, center_y
     return parse_messages(lines)
